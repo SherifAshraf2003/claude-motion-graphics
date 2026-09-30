@@ -765,30 +765,60 @@ window.render = render;
 // Sound-design cue sheet. Written in story time from the same constants that
 // drive the picture, then mapped to real seconds, so audio/soundtrack.py can
 // place every hit on the exact frame.
+const range = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+// times at which an outExpo counter animating over [a, b] visibly steps
+const expoSteps = (a, b, n) => range(n, j => a + (-Math.log2(1 - (j + 1) / (n + 1)) / 10) * (b - a));
 const STORY_CUES = () => ({
-  drop: 2.03,                 // music drops in on the button click
-  logo: 12.98,                // end-card hit
-  montage: [5.0, 10.75],      // feature montage (busier drums)
-  band: 10.75,                // wipe into the grade journey
-  clicks: [1.95, 14.6],
-  impacts: [2.03, 12.98],
-  whooshes: [2.0, 4.48, 10.72, 12.72],
-  risers: [[0, 1.95], [12.0, 12.95]],
-  type: Array.from({ length: 22 }, (_, i) => 2.95 + (i + 1) / 22 * 0.77),
-  pops: [0.1, 1.12, 2.42, 3.12, 3.21, 3.3, 3.42, 3.52, 3.62, 3.78, 3.85, 4.05, 13.7],
-  words: [0.2, 0.29, 0.38, 0.62, 0.72, 0.82],
+  // structure (also used by the optional score)
+  drop: 2.03, logo: 12.98, montage: [5.0, 10.75], band: 10.75,
+  // scene beds: [start, end, kind]
+  beds: [[0, 2.03, 'dark'], [2.03, 5.0, 'air'], [5.0, 10.9, 'tech'], [10.9, 12.85, 'dark'], [12.85, STORY, 'bright']],
+  // S1 hook
+  logoIntro: 0.08,
+  streaks: [[0, 0.9], [0.18, 0.9], [0.32, 1.31]],
+  hookWords: [0.2, 0.29, 0.38, 0.62, 0.72, 0.82],
+  underline: [1.02, 1.42],
+  button: 1.12,
+  cursorIn: [1.3, 1.92],
+  click: 1.95,
+  burst: [2.03, 2.48],
+  // S2 dashboard
+  browser: [2.15, 3.25], browserLand: 2.5,
+  eyebrow: 2.42, headline: 2.48,
+  sidebar: range(7, i => 2.85 + i * 0.055),
+  type: range(22, i => 2.95 + (i + 1) / 22 * 0.77),
+  urlOk: 3.78,
+  stats: [3.12, 3.21, 3.3],
+  counters: [0, 1, 2].flatMap(i => expoSteps(3.25 + i * 0.09, 4.25, 14)),
+  courses: [3.42, 3.52, 3.62],
+  toasts: [3.85, 4.05],
+  sheet: [4.5, 5.0],
+  // S3 features
   feats: FS.slice(0, 6),
-  chimes: [FS[0] + 0.72, FS[1] + 0.46],
-  lock: [FS[2] + 0.5],
-  ticks: [
-    ...Array.from({ length: 8 }, (_, i) => FS[3] + 0.1 + i * 0.04),
-    ...Array.from({ length: 12 }, (_, i) => FS[4] + 0.22 + i * 0.035),
-  ],
-  toggles: [FS[4] + 0.12, ...Array.from({ length: 5 }, (_, j) => FS[5] + 0.34 + j * 0.07)],
+  featExits: FS.slice(1, 6).map(s => s - 0.2),
+  chips: range(3, i => [FS[0] + 0.02 + i * 0.08, FS[0] + 0.5 + i * 0.08]),
+  upload: [FS[0] + 0.24, FS[0] + 0.72], uploadDone: FS[0] + 0.72,
+  options: range(4, i => FS[1] + 0.1 + i * 0.05), select: FS[1] + 0.42, correct: FS[1] + 0.46, ring: [FS[1] + 0.5, FS[1] + 0.88],
+  scan: [FS[2] + 0.02, FS[2] + 0.7], shield: [FS[2] + 0.08, FS[2] + 0.45], lock: FS[2] + 0.5, pulse: FS[2] + 0.62,
+  bars: range(8, i => FS[3] + 0.1 + i * 0.04), line: [FS[3] + 0.34, FS[3] + 0.78], dots: range(8, i => FS[3] + 0.34 + i * 0.055),
+  calSwitch: FS[4] + 0.12, calChips: range(12, i => FS[4] + 0.22 + i * 0.035),
+  rows: range(3, i => FS[5] + 0.08 + i * 0.07), addBtn: FS[5] + 0.2, toggles: range(5, j => FS[5] + 0.34 + j * 0.07),
+  // S4 grades
+  wipe: [BAND[0], BAND[1]],
+  gradesHead: 10.98,
+  path: S4_DRAW,
   nodes: NODES.map((_, i) => lerp(S4_DRAW[0], S4_DRAW[1], nodeFrac[i])),
-  shine: 13.3, // wordmark reveal
+  fly: [12.4, 12.82],
+  reveal: [12.8, 13.2],
+  // S5 end card
+  strokes: [12.98, 13.05, 13.12],
+  wordmark: 13.22,
+  orbs: range(6, i => 13.25 + i * 0.06),
+  tagline: 13.45,
+  cta: 13.7, url: 13.85,
+  cursorOut: [14.0, 14.55], ctaClick: 14.6,
 });
-const toReal = v => (Array.isArray(v) ? v.map(toReal) : Math.round(realAt(v) * 1e4) / 1e4);
+const toReal = v => (Array.isArray(v) ? v.map(toReal) : typeof v === 'number' ? Math.round(realAt(v) * 1e4) / 1e4 : v);
 window.getCues = () => {
   const c = STORY_CUES(), out = { duration: DURATION };
   for (const k in c) out[k] = toReal(c[k]);

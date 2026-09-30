@@ -1,6 +1,6 @@
 # منصتك · Manasetak — 23s motion-graphics promo
 
-A 23-second, 1080p60 Arabic (RTL) promo for [Manasetak](https://manasetak.com/en). Its audio is synthesized sound design (whooshes, clicks, chimes, impacts) locked to the picture, with no music. An optional original score can be switched back on.
+A 23-second, 1080p60 Arabic (RTL) promo for [Manasetak](https://manasetak.com/en). Its audio is synthesized sound design locked to the picture, built to carry the film without music. An optional original score can be switched back on.
 
 **Final video:** [`output/manasetak-promo.mp4`](output/manasetak-promo.mp4)
 
@@ -26,7 +26,15 @@ The optional score's tempo is also derived from the pacing: the beat drops on th
 - `src/brand.js`: the palette from the Manasetak Brand Guideline v1.0: Blue `#00A6F4`, Navy `#052F4A`, Purple `#AD46FF`, Orange `#FF6900`, their tints, and the `#F0F9FF` background. The guideline's Secondary Color page has its two hex labels swapped; the values here were read from the swatches themselves.
 - `src/brand/logo.js` and `src/brand/logo-ar.svg`: the official Arabic lockup, extracted verbatim from the guideline's vector artwork, in its approved color variants (light, navy and blue backgrounds).
 - `scripts/render.mjs`: drives headless Chromium frame by frame and pipes the frames into ffmpeg (H.264, CRF 15, yuv420p). The audio is loudness-normalized to -16 LUFS (true peak -1.5 dB) and encoded as AAC 256k.
-- `audio/soundtrack.py`: synthesized sound design (whooshes, typing clicks, UI pops, chimes and impacts). The hit points come from `output/cues.json`, which the page exports from the same constants that drive the animation. By default the mix is sound effects only; `python3 audio/soundtrack.py --music` adds the original score (pads, arpeggios, bass and drums).
+- `audio/soundtrack.py`: synthesized sound design. Every hit point comes from `output/cues.json`, which the page exports from the same constants that drive the animation (about 60 event types). The mix is designed to stand on its own without music:
+  - **Atmosphere beds:** each scene has a quiet bed (dark air under the hook, bright air on the dashboard, a subtle tech texture under the features), so there is never dead air.
+  - **Layered transitions:** whooshes combine a smoothly swept noise band (filtered in the STFT domain, so there are no zipper artifacts) with a low body layer. They pan with the on-screen motion (right to left, matching the reading direction), and big elements land with a soft low thump.
+  - **Musical interface sounds:** every pitched sound sits in C major pentatonic, so pops, blips and bells form an implied melody. The six feature bells climb a scale, and the school-year path plays a rising line.
+  - **Foley-style detail:** keyboard typing, counter ticks, an upload fill tone, a security scan and lock clunk, and tactile toggle clicks.
+  - **Sonic logo:** three stroke "shings" as the monogram assembles, a shimmer as the wordmark wipes in, and a resolving bell chord.
+  - **Mix:** a shared room and hall reverb, gentle bus compression, and loudness normalization to -16 LUFS in the renderer.
+
+  `python3 audio/soundtrack.py --music` adds the optional original score (pads, arpeggios, bass and drums).
 
 ## Build
 
