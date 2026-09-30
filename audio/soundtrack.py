@@ -1,4 +1,4 @@
-"""Original 15s soundtrack + sound design for the Manasetak promo.
+"""Original soundtrack + sound design for the Manasetak promo.
 
 Everything is synthesized from scratch (no samples, no licensing concerns).
 Hit points are read from output/cues.json, which the page exports from the
@@ -18,7 +18,18 @@ SR = 48000
 cues = json.loads((ROOT / "output/cues.json").read_text())
 DUR = cues["duration"]
 N = int(SR * DUR)
-BEAT = 60 / cues["bpm"]
+
+# Musical structure follows the picture: the beat drops on the button click,
+# and the tempo is chosen so exactly 8 bars fit between the click and the
+# end-card logo hit (the 8th bar is the break before the logo).
+DROP, LOGO = cues["drop"], cues["logo"]
+BARS = 8
+BAR = (LOGO - DROP) / BARS
+BEAT = BAR / 4
+BPM = 60 / BEAT
+BREAK = LOGO - BAR
+MONT0, MONT1 = cues["montage"]
+BAND = cues["band"]
 rng = np.random.default_rng(3)
 
 L = np.zeros(N)
@@ -73,17 +84,20 @@ def saw(f, t, detune=0.0):
 
 
 # ---------------- music ----------------
-# C major, uplifting: F | C | G | Am | F | G | (break) | C
-PROG = [
-    (0.0, 2.0, [53, 57, 60, 64]),      # Fmaj7  (intro, filtered)
-    (2.0, 4.0, [48, 55, 60, 64, 67]),  # C
-    (4.0, 6.0, [43, 55, 59, 62, 67]),  # G
-    (6.0, 8.0, [45, 57, 60, 64, 69]),  # Am
-    (8.0, 10.0, [41, 57, 60, 65, 69]), # F
-    (10.0, 12.0, [43, 55, 59, 62, 67]),  # G
-    (12.0, 13.0, [43, 55, 60, 62, 67]),  # Gsus4 (tension before logo)
-    (13.0, 15.0, [36, 55, 60, 64, 67, 72]),  # C (resolve on the end card)
+# C major, uplifting: Fmaj7 intro | C G Am F C G F | Gsus4 break | C on the logo
+CHORDS = [
+    [48, 55, 60, 64, 67],  # C
+    [43, 55, 59, 62, 67],  # G
+    [45, 57, 60, 64, 69],  # Am
+    [41, 57, 60, 65, 69],  # F
+    [48, 55, 60, 64, 67],  # C
+    [43, 55, 59, 62, 67],  # G
+    [41, 57, 60, 65, 69],  # F
+    [43, 55, 60, 62, 67],  # Gsus4 (break: tension before the logo)
 ]
+PROG = [(0.0, DROP, [53, 57, 60, 64])]  # Fmaj7 intro, filtered
+PROG += [(DROP + i * BAR, DROP + (i + 1) * BAR, c) for i, c in enumerate(CHORDS)]
+PROG += [(LOGO, DUR, [36, 55, 60, 64, 67, 72])]  # C, resolve on the end card
 
 
 def pad(notes, t0, t1, cutoff, gain):
@@ -105,8 +119,8 @@ def pad(notes, t0, t1, cutoff, gain):
 
 
 for t0, t1, notes in PROG:
-    cutoff = 700 if t0 < 2 else (1800 if t0 < 12 else 1300)
-    if t0 >= 13:
+    cutoff = 700 if t0 < DROP else (1800 if t0 < BREAK - 1e-6 else 1300)
+    if t0 >= LOGO - 1e-6:
         cutoff = 2400
     p = pad(notes, t0, t1, cutoff, 0.22)
     # slight stereo spread: different detune seeds per side
@@ -114,7 +128,7 @@ for t0, t1, notes in PROG:
     add(pad(notes, t0, t1, cutoff, 0.22), t0, 0.9, 0.35, verb=0.35)
 
 # intro swell: pad fades in from nothing
-fade_in = int(1.2 * SR)
+fade_in = int(0.6 * DROP * SR)
 L[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
 R[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
 
@@ -128,21 +142,20 @@ def pluck(f, dur=0.35, bright=4000):
 
 # arpeggio: 8ths in the build, 16ths through the feature montage
 for t0, t1, notes in PROG:
-    if t0 < 2 or t0 >= 12:
+    if t0 < DROP - 1e-6 or t0 >= BREAK - 1e-6:
         continue
-    step = BEAT / 2 if t0 < 5 else BEAT / 4
     pitches = [m + 12 for m in notes[1:]]
     k = 0
     t = t0
     while t < t1 - 1e-6:
         m = pitches[[0, 1, 2, 3, 2, 1][k % 6] % len(pitches)]
         add(pluck(mtof(m), bright=3500 + 1500 * (k % 3)), t, 0.16, 0.5 if k % 2 else -0.5, verb=0.25)
-        t += step
+        t += BEAT / 4 if MONT0 - 1e-6 <= t < MONT1 else BEAT / 2
         k += 1
 
 # end-card sparkle arpeggio (C major, rising)
 for i, m in enumerate([72, 76, 79, 84, 88]):
-    add(pluck(mtof(m), 0.6, 6000), 13.05 + i * 0.09, 0.15, (-0.6 + i * 0.3), verb=0.6)
+    add(pluck(mtof(m), 0.6, 6000), LOGO + 0.07 + i * 0.09, 0.15, (-0.6 + i * 0.3), verb=0.6)
 
 
 # bass: pumping 8ths on the root
@@ -154,14 +167,14 @@ def bass_note(f, dur):
 
 
 for t0, t1, notes in PROG:
-    if t0 < 2 or (12 <= t0 < 13):
+    if t0 < DROP - 1e-6 or BREAK - 1e-6 <= t0 < LOGO - 1e-6:
         continue
     f = mtof(notes[0] - 12 if notes[0] > 40 else notes[0])
     t = t0
     while t < t1 - 1e-6:
         add(bass_note(f, BEAT / 2), t, 0.34)
         t += BEAT / 2
-add(bass_note(mtof(36 - 12) * 2, 2.0), 13.0, 0.5)
+add(bass_note(mtof(36 - 12) * 2, 2.0), LOGO, 0.5)
 
 
 # ---------------- drums ----------------
@@ -198,21 +211,23 @@ def duck_at(t0, depth=0.55, rel=0.22):
     duck[i:j] = np.minimum(duck[i:j], d[: j - i])
 
 
-beat = 2.0
-while beat < 12.0 - 1e-6:
+beat = DROP
+b = 0
+while beat < BREAK - 1e-6:
     add(kick(), beat, 0.95)
     duck_at(beat)
-    b = round((beat - 2.0) / BEAT)
-    if beat >= 5.0 and b % 2 == 1:
+    montage = MONT0 - 1e-6 <= beat < MONT1
+    if beat >= MONT0 - 1e-6 and b % 2 == 1:
         add(clap(), beat, 0.45, 0.1, verb=0.3)
-    add(hat(open_=beat >= 5), beat + BEAT / 2, 0.22, 0.3)
-    if beat >= 5.0 and beat < 11:
+    add(hat(open_=beat >= MONT0 - 1e-6), beat + BEAT / 2, 0.22, 0.3)
+    if montage:
         for q in (0.25, 0.75):
             add(hat(), beat + BEAT * q, 0.12, -0.3)
     beat += BEAT
+    b += 1
 # fill into the grade-journey scene
 for i in range(4):
-    add(clap(), 10.75 + i * 0.0625, 0.18 + 0.06 * i, 0.0, verb=0.2)
+    add(clap(), BAND + i * 0.0625, 0.18 + 0.06 * i, 0.0, verb=0.2)
 
 # ---------------- sound design ----------------
 def whoosh(dur=0.55, lo=300, hi=6000, rev=False):
@@ -347,4 +362,4 @@ with wave.open(str(out), "wb") as w:
     w.setsampwidth(2)
     w.setframerate(SR)
     w.writeframes(pcm.tobytes())
-print(f"wrote {out.relative_to(ROOT)}  ({DUR:.1f}s, {SR} Hz stereo)")
+print(f"wrote {out.relative_to(ROOT)}  ({DUR:.1f}s, {BPM:.1f} BPM, {SR} Hz stereo)")

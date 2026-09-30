@@ -1,17 +1,19 @@
-/* Manasetak — 15s promo timeline.
+/* Manasetak — promo timeline.
  * Everything on screen is a pure function of time: render(t) can be called for
  * any t in [0, DURATION] in any order, which makes frame-exact rendering trivial.
  *
- * Beat grid: 120 BPM (0.5s per beat). Scene cuts land on beats so the
- * soundtrack in audio/soundtrack.py lines up with the picture.
+ * The choreography below is written in "story time" (0 – 15s). PACE then maps
+ * story time onto real time: reading holds are stretched, transitions stay
+ * close to 1x so they keep their punch. Story-time layout:
  *   0.0 – 2.5   S1 hook: "منصة تعليمية كاملة بضغطة زر واحدة" + click
  *   2.5 – 5.0   S2 platform builds itself (custom subdomain + dashboard)
- *   5.0 – 11.0  S3 six-feature montage, one feature per second
+ *   5.0 – 11.0  S3 six-feature montage, one feature per story-second
  *  11.0 – 13.0  S4 every school grade, prep 1 → secondary 3
  *  13.0 – 15.0  S5 end card + CTA
+ * Ambient motion (particles, glows, floating UI) runs on real time, so it
+ * never visibly speeds up or slows down.
  */
-const DURATION = 15;
-window.DURATION = DURATION;
+const STORY = 15;
 
 // ---------- math ----------
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
@@ -29,6 +31,58 @@ const E = {
   outBack: (p, s = 1.70158) => 1 + (s + 1) * Math.pow(p - 1, 3) + s * Math.pow(p - 1, 2),
   outElastic: p => (p <= 0 ? 0 : p >= 1 ? 1 : Math.pow(2, -9 * p) * Math.sin((p * 10 - 0.75) * (2 * Math.PI / 3)) + 1),
 };
+// ---------- pacing: story time -> real time ----------
+// [story time, slowdown from here on] — slowdown = real seconds per story second.
+const PACE = [
+  [0.0, 1.25], [1.0, 1.75],          // hook: headline reads, button + cursor
+  [2.0, 1.0],                         // click + burst transition
+  [2.5, 1.75],                        // dashboard builds, headline reads
+  [4.5, 1.0],                         // feature sheet slides up
+  ...[0, 1, 2, 3, 4].flatMap(k => [   // features 1–5: 1.75s each
+    [5 + k, 1.25],                    //   entrance
+    [5.4 + k, 2.375],                 //   reading hold (card UI animates)
+    [5.8 + k, 1.5],                   //   exit
+  ]),
+  [10.0, 1.25], [10.4, 2.143],        // feature 6 (the wipe takes over its exit)
+  [10.75, 1.3],                       // brand-stroke wipe to grades
+  [11.25, 1.5],                       // grade journey
+  [12.25, 1.0],                       // collapse + reveal end card
+  [13.0, 1.375],                      // end card hold
+];
+const PACE_EASE = 0.12; // story seconds over which each speed change is blended
+const PACE_DT = 0.0005;
+const paceTable = (() => {
+  const factor = s => {
+    let f = PACE[0][1];
+    for (let i = 1; i < PACE.length; i++) {
+      const [at, k] = PACE[i];
+      const b = (s - (at - PACE_EASE / 2)) / PACE_EASE;
+      if (b <= 0) break;
+      const w = b >= 1 ? 1 : b * b * (3 - 2 * b);
+      f += (k - PACE[i - 1][1]) * w;
+    }
+    return f;
+  };
+  const n = Math.round(STORY / PACE_DT), real = new Float64Array(n + 1);
+  for (let i = 1; i <= n; i++) real[i] = real[i - 1] + factor((i - 0.5) * PACE_DT) * PACE_DT;
+  return real;
+})();
+const DURATION = Math.round(paceTable[paceTable.length - 1] * 60) / 60;
+window.DURATION = DURATION;
+// real seconds at which story moment s happens
+function realAt(s) {
+  const x = clamp(s, 0, STORY) / PACE_DT, i = Math.min(Math.floor(x), paceTable.length - 2);
+  return paceTable[i] + (paceTable[i + 1] - paceTable[i]) * (x - i);
+}
+// story moment shown at real time t
+function storyAt(t) {
+  let lo = 0, hi = paceTable.length - 1;
+  if (t >= paceTable[hi]) return STORY;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (paceTable[m] <= t) lo = m; else hi = m; }
+  return (lo + (t - paceTable[lo]) / (paceTable[hi] - paceTable[lo])) * PACE_DT;
+}
+let RT = 0; // real time of the frame being drawn (ambient motion)
+
 function rng(seed) { // mulberry32
   return () => {
     seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
@@ -65,7 +119,8 @@ function words(el, t, tin, tout = 1e9, { st = 0.07, d = 0.7, sto = 0.035, dout =
     w.style.transform = `translate3d(0,${((1 - pi) - po) * 115}%,0) rotate(${(1 - pi) * rot}deg)`;
   });
 }
-function glowDrift(el, t, cx, cy, ax, ay, sp, ph = 0) {
+function glowDrift(el, _t, cx, cy, ax, ay, sp, ph = 0) {
+  const t = RT;
   const w = el.offsetWidth || parseFloat(el.style.width), h = el.offsetHeight || parseFloat(el.style.height);
   T(el, { x: cx - w / 2 + Math.sin(t * sp + ph) * ax, y: cy - h / 2 + Math.cos(t * sp * 0.8 + ph) * ay, s: 1 + 0.08 * Math.sin(t * sp * 1.3 + ph) });
 }
@@ -77,7 +132,8 @@ function makeParticles(n, seed) {
     x: r() * 1920, y: r() * 1080, z: 0.3 + r() * 0.7, ph: r() * 6.28, sp: 20 + r() * 50, dr: (r() - 0.5) * 30,
   }));
 }
-function drawParticles(ctx, parts, t, rgb, alpha = 0.7) {
+function drawParticles(ctx, parts, _t, rgb, alpha = 0.7) {
+  const t = RT;
   for (const p of parts) {
     const y = ((p.y - t * p.sp * p.z) % 1180 + 1180) % 1180 - 50;
     const x = p.x + Math.sin(t * 0.7 + p.ph) * p.dr;
@@ -93,8 +149,8 @@ function drawParticles(ctx, parts, t, rgb, alpha = 0.7) {
   }
   ctx.globalAlpha = 1;
 }
-function drawFloor(ctx, t, { hy = 690, rgb = '130,150,255', alpha = 0.22, speed = 1.4 } = {}) {
-  const cx = 960, S = 390, sp = 0.55;
+function drawFloor(ctx, _t, { hy = 690, rgb = '130,150,255', alpha = 0.22, speed = 1.4 } = {}) {
+  const t = RT, cx = 960, S = 390, sp = 0.55;
   ctx.lineWidth = 1.5;
   // receding horizontal lines
   const off = (t * speed) % sp;
@@ -131,22 +187,22 @@ const FEATS = [
     card: `
       <div class="ui" id="f0a" style="left:70px;top:58px;width:620px;height:356px;overflow:hidden">
         <div style="height:250px;position:relative;background:linear-gradient(135deg,var(--primary),var(--primary-deep));overflow:hidden">
-          <div style="position:absolute;left:40px;top:26px;direction:ltr;font:900 64px Cairo;color:rgba(255,255,255,.14)">F = m·a</div>
-          <div style="position:absolute;right:34px;bottom:30px;direction:ltr;font:800 40px Cairo;color:rgba(255,255,255,.12)">v = u + at</div>
+          <div style="position:absolute;left:40px;top:26px;direction:ltr;font:800 64px Zain;color:rgba(255,255,255,.14)">F = m·a</div>
+          <div style="position:absolute;right:34px;bottom:30px;direction:ltr;font:800 40px Zain;color:rgba(255,255,255,.12)">v = u + at</div>
           <div id="f0play" style="position:absolute;left:50%;top:50%;width:104px;height:104px;margin:-52px;border-radius:50%;background:#fff;display:grid;place-items:center;color:var(--primary);font-size:52px;box-shadow:0 0 0 14px rgba(255,255,255,.18)"><svg class="ic" style="stroke:none;margin-left:6px"><use href="#i-play"/></svg></div>
           <div style="position:absolute;left:0;right:0;bottom:0;height:8px;background:rgba(255,255,255,.2)"><div id="f0scrub" style="height:100%;width:0;background:var(--accent);margin-right:0"></div></div>
         </div>
-        <div style="padding:14px 28px"><h4>المحاضرة الأولى: قوانين نيوتن</h4><div style="font-size:19px;font-weight:600;color:#7a82a8">فيديو · 45 دقيقة · الباب الأول</div></div>
+        <div style="padding:14px 28px"><h4>المحاضرة الأولى: قوانين نيوتن</h4><div style="font-size:19px;font-weight:600;color:var(--gray-500)">فيديو · 45 دقيقة · الباب الأول</div></div>
       </div>
       <div class="ui" id="f0b" style="left:70px;top:440px;width:620px;height:118px;padding:18px 26px;display:flex;gap:18px;align-items:center">
-        <div id="f0ib" style="width:74px;height:74px;border-radius:20px;background:#eef1ff;color:var(--primary);display:grid;place-items:center;font-size:38px;position:relative">
+        <div id="f0ib" style="width:74px;height:74px;border-radius:20px;background:var(--blue-50);color:var(--primary);display:grid;place-items:center;font-size:38px;position:relative">
           <svg class="ic" id="f0iu"><use href="#i-upload"/></svg><svg class="ic" id="f0ic" style="position:absolute;stroke-width:3"><use href="#i-check"/></svg></div>
         <div style="flex:1">
           <div style="display:flex;justify-content:space-between;align-items:center;height:40px;position:relative">
-            <span style="position:relative;font-size:24px;font-weight:800"><span id="f0l1">جارٍ الرفع…</span><span id="f0l2" style="position:absolute;right:0;white-space:nowrap;color:#0e9e78">تم الرفع بنجاح</span></span>
+            <span style="position:relative;font-size:24px;font-weight:800"><span id="f0l1">جارٍ الرفع…</span><span id="f0l2" style="position:absolute;right:0;white-space:nowrap;color:var(--navy)">تم الرفع بنجاح</span></span>
             <span id="f0pct" style="font-size:24px;font-weight:900;color:var(--primary);direction:ltr">0%</span>
           </div>
-          <div style="height:12px;border-radius:12px;background:#eceffa;margin-top:8px;overflow:hidden"><div id="f0bar" style="height:100%;width:0;border-radius:12px;background:linear-gradient(90deg,var(--primary-light),var(--primary))"></div></div>
+          <div style="height:12px;border-radius:12px;background:var(--blue-50);margin-top:8px;overflow:hidden"><div id="f0bar" style="height:100%;width:0;border-radius:12px;background:linear-gradient(90deg,var(--primary-light),var(--primary))"></div></div>
         </div>
       </div>
       ${['MP4', 'PDF', 'مذكرة'].map((n, i) => `<div class="fchip" id="f0c${i}"><svg class="ic"><use href="#i-file"/></svg>${n}</div>`).join('')}
@@ -157,75 +213,75 @@ const FEATS = [
     card: `
       <div class="ui" id="f1a" style="left:60px;top:48px;width:640px;height:524px;padding:30px 34px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h4>اختبار الدرس الأول</h4><span class="chip" style="background:#fff4dc;color:#b87400">شرط الاجتياز <bdi dir="ltr">50%</bdi></span></div>
+          <h4>اختبار الدرس الأول</h4><span class="chip" style="background:var(--orange-50);color:var(--orange)">شرط الاجتياز <bdi dir="ltr">50%</bdi></span></div>
         <div style="font-size:34px;font-weight:900;margin:18px 0 14px">ما وحدة قياس القوة؟</div>
         ${['الجول', 'النيوتن', 'الوات', 'الباسكال'].map((o, i) => `
           <div class="opt" id="f1o${i}"><span class="rad"></span><span>${o}</span>${i === 1 ? '<span class="okc" id="f1ok"><svg class="ic"><use href="#i-check"/></svg></span><i class="optok" id="f1hl"></i>' : ''}</div>`).join('')}
       </div>
       <div class="ui" id="f1s" style="left:-44px;top:380px;width:210px;height:210px;border-radius:50%;display:grid;place-items:center">
         <svg viewBox="0 0 100 100" style="position:absolute;inset:14px;width:182px;height:182px;transform:rotate(-90deg)">
-          <circle cx="50" cy="50" r="44" fill="none" stroke="#eef0f8" stroke-width="9"/>
+          <circle cx="50" cy="50" r="44" fill="none" stroke="var(--blue-50)" stroke-width="9"/>
           <circle id="f1ring" cx="50" cy="50" r="44" fill="none" stroke="var(--accent)" stroke-width="9" stroke-linecap="round" stroke-dasharray="276.5" stroke-dashoffset="276.5"/>
         </svg>
-        <div style="text-align:center;line-height:1.1"><div style="font:900 50px Cairo;direction:ltr"><span id="f1n">0</span><span style="font-size:26px;color:#9aa1c2">/20</span></div><div style="font:800 20px Cairo;color:#0e9e78;margin-top:4px">ناجح</div></div>
+        <div style="text-align:center;line-height:1.1"><div style="font:800 50px Zain;direction:ltr"><span id="f1n">0</span><span style="font-size:26px;color:var(--gray-400)">/20</span></div><div style="font:800 20px Zain;color:var(--navy);margin-top:4px">ناجح</div></div>
       </div>
     `,
   },
   {
-    title: 'حماية المحتوى', sub: 'حماية متقدمة لحقوقك الفكرية', icon: 'i-shield', color: B.mint,
+    title: 'حماية المحتوى', sub: 'حماية متقدمة لحقوقك الفكرية', icon: 'i-shield', color: B.purple,
     card: `
-      <div class="ui" id="f2a" style="left:70px;top:58px;width:620px;height:400px;overflow:hidden;background:#0c1640">
+      <div class="ui" id="f2a" style="left:70px;top:58px;width:620px;height:400px;overflow:hidden;background:var(--navy)">
         <div style="position:absolute;inset:0;filter:blur(7px);opacity:.9">
-          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#2a3f9e,#101b52)"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#0A5C8A,#052F4A)"></div>
           <div style="position:absolute;left:50px;top:60px;width:300px;height:26px;border-radius:10px;background:rgba(255,255,255,.35)"></div>
           <div style="position:absolute;left:50px;top:110px;width:420px;height:18px;border-radius:10px;background:rgba(255,255,255,.2)"></div>
           <div style="position:absolute;left:50px;top:146px;width:360px;height:18px;border-radius:10px;background:rgba(255,255,255,.2)"></div>
-          <div style="position:absolute;right:60px;bottom:60px;width:170px;height:170px;border-radius:50%;background:rgba(255,178,36,.5)"></div>
+          <div style="position:absolute;right:60px;bottom:60px;width:170px;height:170px;border-radius:50%;background:rgba(255,105,0,.45)"></div>
         </div>
-        <div id="f2wm" style="position:absolute;left:-200px;top:-200px;width:1100px;height:900px;transform:rotate(-24deg);display:flex;flex-wrap:wrap;gap:34px 60px;align-content:flex-start;direction:ltr;font:700 22px Cairo;color:rgba(255,255,255,.16)">
+        <div id="f2wm" style="position:absolute;left:-200px;top:-200px;width:1100px;height:900px;transform:rotate(-24deg);display:flex;flex-wrap:wrap;gap:34px 60px;align-content:flex-start;direction:ltr;font:700 22px Zain;color:rgba(255,255,255,.16)">
           ${Array.from({ length: 40 }, () => '<span>© abdullah.manasetak.com</span>').join('')}</div>
-        <div id="f2scan" style="position:absolute;left:0;right:0;height:3px;background:var(--mint);box-shadow:0 0 30px 8px var(--mint)"></div>
+        <div id="f2scan" style="position:absolute;left:0;right:0;height:3px;background:var(--success);box-shadow:0 0 30px 8px var(--success)"></div>
         <svg id="f2sh" viewBox="0 0 24 24" style="position:absolute;left:50%;top:50%;width:250px;height:250px;margin:-125px;overflow:visible">
-          <path id="f2shp" d="M12 2.8l7.5 3v6.2c0 4.6-3.1 7.9-7.5 9.4-4.4-1.5-7.5-4.8-7.5-9.4V5.8z" fill="var(--mint)" fill-opacity="0" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>
+          <path id="f2shp" d="M12 2.8l7.5 3v6.2c0 4.6-3.1 7.9-7.5 9.4-4.4-1.5-7.5-4.8-7.5-9.4V5.8z" fill="var(--success)" fill-opacity="0" stroke="#fff" stroke-width="1.1" stroke-linejoin="round"/>
         </svg>
         <svg id="f2lock" viewBox="0 0 24 24" style="position:absolute;left:50%;top:50%;width:104px;height:104px;margin:-46px 0 0 -52px;overflow:visible;fill:none;stroke:#fff;stroke-width:2.4;stroke-linecap:round">
-          <path id="f2shk" d="M8 11V7.5a4 4 0 0 1 8 0V11"/><rect x="5" y="11" width="14" height="10" rx="2.5" fill="#fff"/><circle cx="12" cy="16" r="1.6" fill="var(--mint)" stroke="none"/>
+          <path id="f2shk" d="M8 11V7.5a4 4 0 0 1 8 0V11"/><rect x="5" y="11" width="14" height="10" rx="2.5" fill="#fff"/><circle cx="12" cy="16" r="1.6" fill="var(--success)" stroke="none"/>
         </svg>
-        <i id="f2pulse" class="ring" style="left:50%;top:50%;border-color:var(--mint)"></i>
+        <i id="f2pulse" class="ring" style="left:50%;top:50%;border-color:var(--success)"></i>
       </div>
-      <div class="ui" id="f2b" style="left:150px;top:488px;width:460px;height:84px;display:flex;align-items:center;justify-content:center;gap:14px;font:800 28px Cairo">
-        <span style="width:46px;height:46px;border-radius:50%;background:var(--mint);display:grid;place-items:center;color:#fff;font-size:26px"><svg class="ic" style="stroke-width:3"><use href="#i-check"/></svg></span>محتواك محمي بالكامل</div>
+      <div class="ui" id="f2b" style="left:150px;top:488px;width:460px;height:84px;display:flex;align-items:center;justify-content:center;gap:14px;font:800 28px Zain">
+        <span style="width:46px;height:46px;border-radius:50%;background:var(--success);display:grid;place-items:center;color:#fff;font-size:26px"><svg class="ic" style="stroke-width:3"><use href="#i-check"/></svg></span>محتواك محمي بالكامل</div>
     `,
   },
   {
-    title: 'إحصائيات دقيقة', sub: 'تابع أداء كل طالب خطوة بخطوة', icon: 'i-chart', color: B.primaryLight,
+    title: 'إحصائيات دقيقة', sub: 'تابع أداء كل طالب خطوة بخطوة', icon: 'i-chart', color: B.blue,
     card: `
       <div class="ui" id="f3a" style="left:60px;top:48px;width:640px;height:430px;padding:26px 32px">
-        <div style="display:flex;justify-content:space-between;align-items:center"><h4>أداء الطلاب</h4><span class="chip" style="background:#e3faf3;color:#0e9e78"><bdi dir="ltr">+24%</bdi> هذا الشهر</span></div>
-        <div style="font-size:20px;font-weight:700;color:#7a82a8;margin-top:6px">متوسط الدرجات</div>
-        <div style="font:900 60px Cairo;line-height:1.1;direction:ltr;text-align:right"><span id="f3k">0</span>%</div>
+        <div style="display:flex;justify-content:space-between;align-items:center"><h4>أداء الطلاب</h4><span class="chip" style="background:var(--blue-50);color:var(--navy)"><bdi dir="ltr">+24%</bdi> هذا الشهر</span></div>
+        <div style="font-size:20px;font-weight:700;color:var(--gray-500);margin-top:6px">متوسط الدرجات</div>
+        <div style="font:800 60px Zain;line-height:1.1;direction:ltr;text-align:right"><span id="f3k">0</span>%</div>
         <svg id="f3svg" viewBox="0 0 576 210" style="position:absolute;left:32px;bottom:26px;width:576px;height:210px;overflow:visible">
-          ${[0, 1, 2, 3].map(i => `<line x1="0" x2="576" y1="${10 + i * 60}" y2="${10 + i * 60}" stroke="#eef0f8" stroke-width="2"/>`).join('')}
-          ${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<rect class="f3bar" x="${i * 76 + 6}" y="190" width="44" height="0" rx="10" fill="${i === 7 ? 'var(--primary)' : '#dfe4ff'}"/>`).join('')}
+          ${[0, 1, 2, 3].map(i => `<line x1="0" x2="576" y1="${10 + i * 60}" y2="${10 + i * 60}" stroke="var(--blue-50)" stroke-width="2"/>`).join('')}
+          ${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<rect class="f3bar" x="${i * 76 + 6}" y="190" width="44" height="0" rx="10" fill="${i === 7 ? 'var(--primary)' : 'var(--blue-100)'}"/>`).join('')}
           <path id="f3line" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
           ${[0, 1, 2, 3, 4, 5, 6, 7].map(i => `<circle class="f3dot" r="8" fill="#fff" stroke="var(--accent)" stroke-width="4"/>`).join('')}
         </svg>
       </div>
       <div class="ui" id="f3b" style="left:410px;top:430px;width:300px;height:150px;display:flex;align-items:center;gap:18px;padding:0 26px">
         <svg viewBox="0 0 100 100" style="width:96px;height:96px;transform:rotate(-90deg);flex:none">
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#eef0f8" stroke-width="14"/>
-          <circle id="f3don" cx="50" cy="50" r="40" fill="none" stroke="var(--mint)" stroke-width="14" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/></svg>
-        <div><div style="font:700 19px Cairo;color:#7a82a8">نسبة الحضور</div><div style="font:900 44px Cairo;line-height:1.1;direction:ltr;text-align:right"><span id="f3d">0</span>%</div></div>
+          <circle cx="50" cy="50" r="40" fill="none" stroke="var(--blue-50)" stroke-width="14"/>
+          <circle id="f3don" cx="50" cy="50" r="40" fill="none" stroke="var(--success)" stroke-width="14" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/></svg>
+        <div><div style="font:700 19px Zain;color:var(--gray-500)">نسبة الحضور</div><div style="font:800 44px Zain;line-height:1.1;direction:ltr;text-align:right"><span id="f3d">0</span>%</div></div>
       </div>
     `,
   },
   {
-    title: 'جدولة تلقائية', sub: 'دروسك منظمة بالترتيب الزمني', icon: 'i-cal', color: B.coral,
+    title: 'جدولة تلقائية', sub: 'دروسك منظمة بالترتيب الزمني', icon: 'i-cal', color: B.orange,
     card: `
       <div class="ui" id="f4a" style="left:50px;top:48px;width:660px;height:524px;padding:26px 36px">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <h4>جدول الدروس <span style="color:#9aa1c2;font-weight:700;font-size:21px">· أكتوبر</span></h4>
-          <span style="display:flex;align-items:center;gap:12px;font:800 20px Cairo;color:#58608a">جدولة تلقائية ${sw('f4sw')}</span></div>
+          <h4>جدول الدروس <span style="color:var(--gray-400);font-weight:700;font-size:21px">· أكتوبر</span></h4>
+          <span style="display:flex;align-items:center;gap:12px;font:800 20px Zain;color:var(--gray-500)">جدولة تلقائية ${sw('f4sw')}</span></div>
         <div class="cal" id="f4cal">
           ${['سبت', 'أحد', 'اثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة'].map(d => `<div class="dn">${d}</div>`).join('')}
           ${Array.from({ length: 28 }, (_, i) => `<div class="cell"><em>${i + 1}</em></div>`).join('')}
@@ -234,15 +290,15 @@ const FEATS = [
     `,
   },
   {
-    title: 'إدارة المشرفين', sub: 'صلاحيات كاملة وتحكم في فريق العمل', icon: 'i-users', color: B.accent,
+    title: 'إدارة المشرفين', sub: 'صلاحيات كاملة وتحكم في فريق العمل', icon: 'i-users', color: B.purple,
     card: `
       <div class="ui" id="f5a" style="left:50px;top:48px;width:660px;height:524px;padding:28px 34px">
         <div style="display:flex;justify-content:space-between;align-items:center"><h4>فريق العمل</h4>
           <span id="f5add" class="chip" style="background:var(--primary);color:#fff;font-size:20px;padding:6px 18px 8px"><svg class="ic" style="stroke-width:3"><use href="#i-plus"/></svg>إضافة مشرف</span></div>
-        <div style="display:flex;justify-content:flex-end;gap:26px;margin:14px 0 2px;padding-left:8px;font:800 17px Cairo;color:#9aa1c2"><span style="width:84px;text-align:center">الطلاب</span><span style="width:84px;text-align:center">الامتحانات</span></div>
-        ${[['م', 'أ. محمد سامي', 'مشرف الامتحانات', B.primary], ['س', 'أ. سارة علي', 'مشرفة الطلاب', B.coral], ['ن', 'أ. نور حسن', 'مساعد', B.mint]].map((r, i) => `
+        <div style="display:flex;justify-content:flex-end;gap:26px;margin:14px 0 2px;padding-left:8px;font:800 17px Zain;color:var(--gray-400)"><span style="width:84px;text-align:center">الطلاب</span><span style="width:84px;text-align:center">الامتحانات</span></div>
+        ${[['م', 'أ. محمد سامي', 'مشرف الامتحانات', B.blue], ['س', 'أ. سارة علي', 'مشرفة الطلاب', B.purple], ['ن', 'أ. نور حسن', 'مساعد', B.orange]].map((r, i) => `
           <div class="mrow" id="f5r${i}"><span class="av" style="background:${r[3]}">${r[0]}</span>
-            <div style="flex:1"><div style="font:800 25px Cairo">${r[1]}</div><div style="font:600 18px Cairo;color:#7a82a8">${r[2]}</div></div>
+            <div style="flex:1"><div style="font:800 25px Zain">${r[1]}</div><div style="font:700 18px Zain;color:var(--gray-500)">${r[2]}</div></div>
             <span style="width:84px;display:grid;place-items:center">${sw('f5s' + i + 'a')}</span><span style="width:84px;display:grid;place-items:center">${sw('f5s' + i + 'b')}</span></div>`).join('')}
       </div>
     `,
@@ -252,24 +308,24 @@ const FEATS = [
 const FS = [4.78, 6, 7, 8, 9, 10, 11.2];
 
 const extraCSS = `
-.fchip{position:absolute;left:0;top:0;display:flex;align-items:center;gap:10px;background:#fff;color:#10183d;font:800 24px Cairo;padding:10px 20px 12px;border-radius:16px;box-shadow:0 20px 40px -12px rgba(0,0,0,.5)}
+.fchip{position:absolute;left:0;top:0;display:flex;align-items:center;gap:10px;background:#fff;color:var(--navy);font:800 24px Zain;padding:10px 20px 12px;border-radius:16px;box-shadow:0 20px 40px -12px rgba(0,0,0,.5)}
 .fchip .ic{color:var(--primary);font-size:28px}
-.opt{position:relative;display:flex;align-items:center;gap:16px;height:72px;border-radius:18px;border:2px solid #e6e9f5;margin-top:14px;padding:0 22px 4px;font:800 27px Cairo;overflow:hidden}
-.opt .rad{width:28px;height:28px;border-radius:50%;border:3px solid #cdd3ea;flex:none;position:relative;z-index:1}
-.optok{position:absolute;inset:0;background:#e3faf3;border:3px solid var(--mint);border-radius:16px;opacity:0}
+.opt{position:relative;display:flex;align-items:center;gap:16px;height:72px;border-radius:18px;border:2px solid var(--blue-100);margin-top:14px;padding:0 22px 4px;font:800 27px Zain;overflow:hidden}
+.opt .rad{width:28px;height:28px;border-radius:50%;border:3px solid var(--gray-300);flex:none;position:relative;z-index:1}
+.optok{position:absolute;inset:0;background:var(--blue-50);border:3px solid var(--success);border-radius:16px;opacity:0}
 .opt > *:not(.optok){position:relative;z-index:1}
-.okc{position:absolute!important;left:20px;width:42px;height:42px;border-radius:50%;background:var(--mint);color:#fff;display:grid;place-items:center;font-size:24px}
+.okc{position:absolute!important;left:20px;width:42px;height:42px;border-radius:50%;background:var(--success);color:#fff;display:grid;place-items:center;font-size:24px}
 .okc .ic{stroke-width:3.2}
-.sw{position:relative;display:inline-block;width:62px;height:34px;border-radius:99px;background:#dfe3f2;overflow:hidden;flex:none}
-.sw b{position:absolute;inset:0;background:var(--mint);opacity:0}
+.sw{position:relative;display:inline-block;width:62px;height:34px;border-radius:99px;background:var(--gray-300);overflow:hidden;flex:none}
+.sw b{position:absolute;inset:0;background:var(--success);opacity:0}
 .sw i{position:absolute;top:4px;right:4px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:18px;position:relative}
-.cal .dn{font:800 16px Cairo;color:#9aa1c2;text-align:center;padding-bottom:2px}
-.cal .cell{height:84px;border-radius:14px;background:#f5f6fc;position:relative}
-.cal .cell em{position:absolute;top:4px;right:10px;font:700 15px Cairo;font-style:normal;color:#aab0cc}
-.lch{position:absolute;left:6px;right:6px;bottom:8px;height:40px;border-radius:11px;color:#fff;font:800 17px Cairo;display:grid;place-items:center;box-shadow:0 8px 16px -6px rgba(0,0,0,.35)}
-.mrow{display:flex;align-items:center;gap:18px;height:118px;border-top:1.5px solid #eef0f8}
-.av{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;color:#fff;font:900 30px Cairo;flex:none}
+.cal .dn{font:800 16px Zain;color:var(--gray-400);text-align:center;padding-bottom:2px}
+.cal .cell{height:84px;border-radius:14px;background:var(--bg);position:relative}
+.cal .cell em{position:absolute;top:4px;right:10px;font:700 15px Zain;font-style:normal;color:var(--gray-400)}
+.lch{position:absolute;left:6px;right:6px;bottom:8px;height:40px;border-radius:11px;color:#fff;font:800 17px Zain;display:grid;place-items:center;box-shadow:0 8px 16px -6px rgba(0,0,0,.35)}
+.mrow{display:flex;align-items:center;gap:18px;height:118px;border-top:1.5px solid var(--blue-50)}
+.av{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;color:#fff;font:800 30px Zain;flex:none}
 `;
 
 // ---------- scene 4 path ----------
@@ -298,6 +354,7 @@ const el = {};
 let P1, P3, P4, pathLen = 0, nodeFrac = [], f2len = 0, f3len = 0, lineLen = 0;
 function init() {
   const st = document.createElement('style'); st.textContent = extraCSS; document.head.appendChild(st);
+  $$('[data-logo]').forEach(n => { n.innerHTML = window.logoSVG(n.dataset.logo, n.dataset.logoParts || 'all'); });
 
   // features
   const feats = $('feats'), glows = $('s3glows'), prog = $('s3prog');
@@ -322,7 +379,7 @@ function init() {
   // calendar lesson chips
   const cells = $$('#f4cal .cell');
   const L = [[1, 0], [3, 1], [5, 2], [8, 0], [10, 1], [12, 3], [15, 0], [17, 1], [19, 2], [22, 0], [24, 1], [26, 3]];
-  const cols = [B.primary, B.coral, B.mint, B.accent];
+  const cols = [B.blue, B.purple, B.navy, B.orange];
   L.forEach(([c, ci], i) => cells[c].insertAdjacentHTML('beforeend', `<div class="lch" id="lc${i}" style="background:${cols[ci]}">درس ${i + 1}</div>`));
 
   // scene 4 path + nodes
@@ -344,8 +401,8 @@ function init() {
   });
   const nodes = $('s4nodes');
   NODES.forEach((nd, i) => nodes.insertAdjacentHTML('beforeend',
-    `<div class="node" id="nd${i}" style="left:${nd.x}px;top:${nd.y}px;--nc:${nd.g ? B.primaryLight : B.accent}"><div class="nc">${nd.n}</div><div class="nl">${nd.l}</div></div>`));
-  [[0, 2, 'المرحلة الإعدادية', B.accent], [3, 5, 'المرحلة الثانوية', B.primaryLight]].forEach(([a, b, txt, c], i) => {
+    `<div class="node" id="nd${i}" style="left:${nd.x}px;top:${nd.y}px;--nc:${nd.g ? B.blue : B.orange}"><div class="nc">${nd.n}</div><div class="nl">${nd.l}</div></div>`));
+  [[0, 2, 'المرحلة الإعدادية', B.orange], [3, 5, 'المرحلة الثانوية', B.blue]].forEach(([a, b, txt, c], i) => {
     const x0 = NODES[b].x - 100, x1 = NODES[a].x + 100;
     nodes.insertAdjacentHTML('beforeend', `<div class="grp" id="gp${i}" style="left:${x0}px;width:${x1 - x0}px;color:${c}"><span>${txt}</span><div class="gl"></div></div>`);
   });
@@ -353,7 +410,7 @@ function init() {
 
   // scene 5 orbit badges
   const orbit = $('s5orbit');
-  FEATS.forEach((f, i) => orbit.insertAdjacentHTML('beforeend', `<div class="orb" id="ob${i}" style="--oc:${f.color}"><svg class="ic"><use href="#${f.icon}"/></svg></div>`));
+  FEATS.forEach((f, i) => orbit.insertAdjacentHTML('beforeend', `<div class="orb" id="ob${i}" ><svg class="ic"><use href="#${f.icon}"/></svg></div>`));
 
   // misc measurements
   const u = $('s1under'); el.ulen = u.getTotalLength(); u.style.strokeDasharray = el.ulen;
@@ -410,7 +467,7 @@ function scene1(t) {
     T($('st' + i), { x: lerp(2000, -900, p), y, o: Math.sin(Math.PI * p) * 0.7 });
   });
   const pp = P(t, 0.08, 0.5);
-  T($('s1pill'), { pre: 'translateX(-50%)', y: (1 - E.outBack(pp)) * 30, s: 0.85 + 0.15 * E.outBack(pp), o: P(t, 0.08, 0.3) });
+  T($('s1pill'), { y: (1 - E.out5(pp)) * 30, o: P(t, 0.08, 0.3) });
   words($('s1l1'), t, 0.2, 1e9, { st: 0.09, d: 0.75 });
   words($('s1l2'), t, 0.62, 1e9, { st: 0.1, d: 0.75 });
   $('s1under').style.strokeDashoffset = el.ulen * (1 - E.inOut3(P(t, 1.02, 1.42)));
@@ -440,14 +497,14 @@ function scene2(t) {
 
   const pbw = E.outExpo(P(t, 2.15, 3.25));
   const u = t - 2.5;
-  T($('browser'), { y: (1 - pbw) * 420 + Math.sin(t * 1.6) * 5, rx: lerp(40, 7, pbw) - u * 0.6, ry: lerp(26, 11, pbw) - u * 1.2, s: lerp(0.85, 1, pbw), o: P(t, 2.15, 2.4) });
+  T($('browser'), { y: (1 - pbw) * 420 + Math.sin(RT * 1.6) * 5, rx: lerp(40, 7, pbw) - u * 0.6, ry: lerp(26, 11, pbw) - u * 1.2, s: lerp(0.85, 1, pbw), o: P(t, 2.15, 2.4) });
 
   // subdomain typing
   const url = 'abdullah.manasetak.com', n = Math.floor(P(t, 2.95, 3.72) * url.length);
   const typed = url.slice(0, n);
   const cut = Math.min(n, 8);
   $('urltext').innerHTML = `<b>${typed.slice(0, cut)}</b>${typed.slice(cut)}`;
-  $('caret').style.opacity = (t < 3.8 || Math.floor(t * 4) % 2 === 0) && t < 4.1 ? 1 : 0;
+  $('caret').style.opacity = (t < 3.8 || Math.floor(RT * 4) % 2 === 0) && t < 4.1 ? 1 : 0;
   const ok = P(t, 3.78, 4.08);
   T($('urlok'), { s: E.outBack(ok, 2.5), o: ok > 0 ? 1 : 0 });
 
@@ -468,8 +525,8 @@ function scene2(t) {
     T(c, { y: (1 - E.outBack(p)) * 60, o: P(t, 3.42 + i * 0.1, 3.6 + i * 0.1) });
   });
   const t1 = P(t, 3.85, 4.25), t2 = P(t, 4.05, 4.45);
-  T($('toast1'), { y: (1 - E.outBack(t1, 2)) * 40 + Math.sin(t * 2) * 6, s: 0.7 + 0.3 * E.outBack(t1, 2), o: P(t, 3.85, 3.95) });
-  T($('toast2'), { y: (1 - E.outBack(t2, 2)) * 40 + Math.cos(t * 2) * 6, s: 0.7 + 0.3 * E.outBack(t2, 2), o: P(t, 4.05, 4.15) });
+  T($('toast1'), { y: (1 - E.outBack(t1, 2)) * 40 + Math.sin(RT * 2) * 6, s: 0.7 + 0.3 * E.outBack(t1, 2), o: P(t, 3.85, 3.95) });
+  T($('toast2'), { y: (1 - E.outBack(t2, 2)) * 40 + Math.cos(RT * 2) * 6, s: 0.7 + 0.3 * E.outBack(t2, 2), o: P(t, 4.05, 4.15) });
 
   // push back as the feature sheet slides over
   const ex = E.inOut3(P(t, 4.5, 5.0));
@@ -526,13 +583,13 @@ const FEAT_ANIM = [
     });
     const q = E.inOut3(P(v, 0.24, 0.72)), done = P(v, 0.72, 0.8);
     $('f0bar').style.width = `${q * 100}%`;
-    $('f0bar').style.background = done > 0 ? 'var(--mint)' : '';
+    $('f0bar').style.background = done > 0 ? 'var(--navy)' : '';
     $('f0pct').textContent = `${Math.round(q * 100)}%`;
-    $('f0pct').style.color = done > 0 ? '#0e9e78' : '';
+    $('f0pct').style.color = done > 0 ? 'var(--navy)' : '';
     $('f0scrub').style.width = `${q * 100}%`;
     T($('f0l1'), { y: -done * 20, o: 1 - done }); T($('f0l2'), { y: (1 - done) * 20, o: done });
     T($('f0iu'), { s: 1 - done, o: 1 - done }); T($('f0ic'), { s: E.outBack(done, 3), o: done });
-    $('f0ib').style.background = done > 0.5 ? '#e3faf3' : '#eef1ff'; $('f0ib').style.color = done > 0.5 ? '#0e9e78' : 'var(--primary)';
+    $('f0ib').style.background = done > 0.5 ? 'var(--blue)' : 'var(--blue-50)'; $('f0ib').style.color = done > 0.5 ? '#fff' : 'var(--primary)';
     T($('f0play'), { s: 1 + 0.06 * Math.sin(v * 12) });
   },
   v => { // exams
@@ -597,11 +654,19 @@ const FEAT_ANIM = [
 
 // ---------- band wipe S3 → S4 ----------
 const BAND = [10.75, 11.25];
-function bandX(t) { return lerp(2350, -700, E.inOut3(P(t, BAND[0], BAND[1]))); }
+// The monogram, scaled up as a supergraphic, sweeps right-to-left; the grades
+// scene is revealed behind the trailing edge of its right stroke.
+const BAND_H = 1500, BAND_Y = -210;
+const bandK = () => BAND_H / window.LOGO.h;
+function bandX(t) { return lerp(1960, -2160, E.inOut3(P(t, BAND[0], BAND[1]))); }
+function bandSeam(bx, y) {
+  const L = window.LOGO, k = bandK();
+  return lerp(bx + (L.seam.top - L.monoX) * k, bx + (L.seam.bottom - L.monoX) * k, (y - BAND_Y) / BAND_H);
+}
 function renderBand(t) {
   const b = $('band');
   if (!show(b, t > BAND[0] && t < BAND[1])) return;
-  T(b, { pre: 'skewX(-12deg)', x: bandX(t) - 260 });
+  T(b, { x: bandX(t), y: BAND_Y });
 }
 
 // ---------- scene 4 ----------
@@ -610,7 +675,7 @@ function scene4(t) {
   if (!show(s4, t >= BAND[0] && t < 13.25)) return;
   if (t < BAND[1]) {
     const bx = bandX(t);
-    s4.style.clipPath = `polygon(${bx + 115}px 0, 2000px 0, 2000px 1080px, ${bx - 115}px 1080px)`;
+    s4.style.clipPath = `polygon(${bandSeam(bx, 0)}px 0, 2000px 0, 2000px 1080px, ${bandSeam(bx, 1080)}px 1080px)`;
   } else s4.style.clipPath = 'none';
   glowDrift($('s4g'), t, 960, 760, 200, 60, 0.8);
   const ctx = el.c4; ctx.clearRect(0, 0, 1920, 1080);
@@ -630,7 +695,7 @@ function scene4(t) {
     T(n.querySelector('.nc'), { s: E.outBack(p, 2.6), o: p > 0 ? 1 : 0 });
     const pl = E.out5(P(t, tk + 0.06, tk + 0.45));
     T(n.querySelector('.nl'), { y: (1 - pl) * 20, o: pl });
-    T(n, { y: Math.sin(t * 2.2 + i) * 5 });
+    T(n, { y: Math.sin(RT * 2.2 + i) * 5 });
   });
   [0, 3].forEach((ni, g) => {
     const tk = lerp(S4_DRAW[0], S4_DRAW[1], nodeFrac[ni]);
@@ -657,12 +722,17 @@ function scene5(t) {
   glowDrift($('s5gA'), t, 700, 420, 140, 70, 0.8);
   glowDrift($('s5gB'), t, 1320, 700, 120, 60, 0.9, 2);
 
-  const pm = P(t, 12.98, 13.5);
-  T($('lmark'), { s: E.outBack(pm, 1.9), r: (1 - E.out3(pm)) * -35, o: P(t, 12.98, 13.05) });
-  const pw = E.outExpo(P(t, 13.2, 13.75));
-  const lw = $('lword'); lw.style.clipPath = `inset(-20% 0 -20% ${(1 - pw) * 100}%)`;
-  T(lw, { x: (1 - pw) * 60 });
-  $('lshine').style.left = `${lerp(-120, 280, E.inOut3(P(t, 14.0, 14.45)))}px`;
+  // official lockup assembles: the three monogram strokes slide into place,
+  // then the wordmark wipes in. The lockup itself is never rotated, distorted
+  // or given effects (guideline p.9).
+  const lg = $('logo');
+  [['.lg-left', 120, 0], ['.lg-mid', -120, 0.07], ['.lg-right', 120, 0.14]].forEach(([sel, dy, d]) => {
+    const p = E.outExpo(P(t, 12.98 + d, 13.5 + d));
+    T(lg.querySelector(sel), { y: (1 - p) * dy, o: P(t, 12.98 + d, 13.06 + d) });
+  });
+  const pw = E.outExpo(P(t, 13.22, 13.8)), word = lg.querySelector('.lg-word');
+  word.style.clipPath = `inset(-20% 0 -20% ${(1 - pw) * 100}%)`;
+  T(word, { x: (1 - pw) * 18 });
   words($('s5tag'), t, 13.45, 1e9, { st: 0.09, d: 0.65 });
   const pb = P(t, 13.7, 14.1), click = Math.sin(Math.PI * P(t, 14.6, 14.76));
   T($('s5btn'), { s: E.outBack(pb, 2.2) * (1 - 0.07 * click), o: P(t, 13.7, 13.8) });
@@ -675,27 +745,31 @@ function scene5(t) {
   OB.forEach(([x, y], i) => {
     const p = P(t, 13.25 + i * 0.06, 13.75 + i * 0.06);
     const e = E.outBack(p, 1.8);
-    T($('ob' + i), { x: lerp(960, x, E.out5(p)), y: lerp(460, y, E.out5(p)) + Math.sin(t * 2 + i * 1.3) * 10, s: e, r: Math.sin(t * 1.5 + i) * 6, o: clamp(p * 4) });
+    T($('ob' + i), { x: lerp(960, x, E.out5(p)), y: lerp(460, y, E.out5(p)) + Math.sin(RT * 2 + i * 1.3) * 10, s: e, r: Math.sin(RT * 1.5 + i) * 6, o: clamp(p * 4) });
   });
   const all = $('s5all'); all.style.transformOrigin = '960px 540px';
   T(all, { s: 1.04 - 0.04 * E.out3(P(t, 12.9, 15)) });
 }
 
 // ---------- master ----------
-function render(t) {
-  t = clamp(t, 0, DURATION);
+function render(rt) {
+  RT = clamp(rt, 0, DURATION);
+  const t = storyAt(RT);
   scene1(t); scene2(t); scene3(t); renderBand(t); scene4(t); scene5(t);
   renderCursor(t);
-  $('grain').style.backgroundPosition = `${Math.floor(t * 60 * 37) % 256}px ${Math.floor(t * 60 * 91) % 256}px`;
+  $('grain').style.backgroundPosition = `${Math.floor(RT * 60 * 37) % 256}px ${Math.floor(RT * 60 * 91) % 256}px`;
   $('vignette').style.opacity = t > 12.9 ? 1 - P(t, 12.9, 13.2) * 0.7 : 1;
 }
 window.render = render;
 
-// Sound-design cue sheet, derived from the same constants that drive the picture,
-// so audio/soundtrack.py can place every hit on the exact frame.
-window.getCues = () => ({
-  bpm: 120,
-  duration: DURATION,
+// Sound-design cue sheet. Written in story time from the same constants that
+// drive the picture, then mapped to real seconds, so audio/soundtrack.py can
+// place every hit on the exact frame.
+const STORY_CUES = () => ({
+  drop: 2.03,                 // music drops in on the button click
+  logo: 12.98,                // end-card hit
+  montage: [5.0, 10.75],      // feature montage (busier drums)
+  band: 10.75,                // wipe into the grade journey
   clicks: [1.95, 14.6],
   impacts: [2.03, 12.98],
   whooshes: [2.0, 4.48, 10.72, 12.72],
@@ -712,9 +786,14 @@ window.getCues = () => ({
   ],
   toggles: [FS[4] + 0.12, ...Array.from({ length: 5 }, (_, j) => FS[5] + 0.34 + j * 0.07)],
   nodes: NODES.map((_, i) => lerp(S4_DRAW[0], S4_DRAW[1], nodeFrac[i])),
-  logo: 12.98,
-  shine: 14.0,
+  shine: 13.3, // wordmark reveal
 });
+const toReal = v => (Array.isArray(v) ? v.map(toReal) : Math.round(realAt(v) * 1e4) / 1e4);
+window.getCues = () => {
+  const c = STORY_CUES(), out = { duration: DURATION };
+  for (const k in c) out[k] = toReal(c[k]);
+  return out;
+};
 
 // ---------- boot ----------
 window.ready = document.fonts.ready.then(() => {
