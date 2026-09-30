@@ -4,6 +4,7 @@
 //   node scripts/render.mjs                    -> output/manasetak-promo.mp4
 //   node scripts/render.mjs --stills 1,3.5,9   -> output/stills/*.png (quick checks)
 //   node scripts/render.mjs --fps 30           -> lower fps for fast drafts
+//   node scripts/render.mjs --audio-only       -> swap the soundtrack into the existing video (no re-render)
 import { chromium } from 'playwright';
 import { spawn, execFileSync } from 'node:child_process';
 import http from 'node:http';
@@ -18,6 +19,8 @@ const FPS = Number(arg('--fps', 60));
 const stills = arg('--stills');
 const out = path.join(root, arg('--out', 'output/manasetak-promo.mp4'));
 const audio = path.join(root, 'output/soundtrack.wav');
+// loudness-normalise to the usual social-video target, with a true-peak ceiling
+const AUDIO_OUT = ['-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-ar', '48000', '-c:a', 'aac', '-b:a', '256k'];
 
 function ffmpegPath() {
   if (process.env.FFMPEG) return process.env.FFMPEG;
@@ -42,7 +45,13 @@ await page.evaluate(() => window.ready);
 const duration = await page.evaluate(() => window.DURATION);
 const frame = async t => { await page.evaluate(t => window.render(t), t); return page.screenshot({ type: 'png' }); };
 
-if (args.includes('--cues')) {
+if (args.includes('--audio-only')) {
+  const tmp = out.replace(/\.mp4$/, '.tmp.mp4');
+  execFileSync(ffmpegPath(), ['-y', '-loglevel', 'error', '-i', out, '-i', audio, '-map', '0:v', '-map', '1:a',
+    '-c:v', 'copy', ...AUDIO_OUT, '-shortest', '-movflags', '+faststart', tmp]);
+  fs.renameSync(tmp, out);
+  console.log(`swapped soundtrack into ${path.relative(root, out)}`);
+} else if (args.includes('--cues')) {
   const cues = await page.evaluate(() => window.getCues());
   fs.mkdirSync(path.join(root, 'output'), { recursive: true });
   fs.writeFileSync(path.join(root, 'output/cues.json'), JSON.stringify(cues, null, 2));
@@ -62,7 +71,7 @@ if (args.includes('--cues')) {
     ...(hasAudio ? ['-i', audio] : []),
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '15', '-pix_fmt', 'yuv420p', '-profile:v', 'high',
     '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
-    ...(hasAudio ? ['-c:a', 'aac', '-b:a', '256k', '-shortest'] : []),
+    ...(hasAudio ? [...AUDIO_OUT, '-shortest'] : []),
     '-movflags', '+faststart', out,
   ], { stdio: ['pipe', 'inherit', 'inherit'] });
   const total = Math.round(duration * FPS);

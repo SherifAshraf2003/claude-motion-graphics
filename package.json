@@ -8,6 +8,7 @@
     "audio": "npm run cues && python3 audio/soundtrack.py",
     "stills": "node scripts/render.mjs --stills 1.9,4.2,5.6,6.7,7.7,8.7,9.7,10.9,11.9,14.3",
     "video": "node scripts/render.mjs",
+    "remux": "npm run audio && node scripts/render.mjs --audio-only",
     "build": "npm run audio && npm run video"
   },
   "repository": {

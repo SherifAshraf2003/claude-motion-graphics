@@ -1,6 +1,6 @@
 # منصتك · Manasetak — 23s motion-graphics promo
 
-A 23-second, 1080p60 Arabic (RTL) promo for [Manasetak](https://manasetak.com/en). It has an original synthesized soundtrack with sound design locked to the picture.
+A 23-second, 1080p60 Arabic (RTL) promo for [Manasetak](https://manasetak.com/en). Its audio is synthesized sound design (whooshes, clicks, chimes, impacts) locked to the picture, with no music. An optional original score can be switched back on.
 
 **Final video:** [`output/manasetak-promo.mp4`](output/manasetak-promo.mp4)
 
@@ -16,17 +16,17 @@ A 23-second, 1080p60 Arabic (RTL) promo for [Manasetak](https://manasetak.com/en
 
 ### Pacing
 
-The choreography is written in "story time" (0–15s). The `PACE` table at the top of `src/timeline.js` maps story time to real time. It stretches the reading holds (headlines, the dashboard, each feature) and keeps the transitions close to 1x so they stay snappy. To make the whole video slower or faster, change the numbers in that table and run `npm run build`: the video length, the sound-effect timing and the music tempo all follow.
+The choreography is written in "story time" (0–15s). The `PACE` table at the top of `src/timeline.js` maps story time to real time. It stretches the reading holds (headlines, the dashboard, each feature) and keeps the transitions close to 1x so they stay snappy. To make the whole video slower or faster, change the numbers in that table and run `npm run build`: the video length and the sound-effect timing both follow.
 
-The music tempo is derived from the pacing. The beat drops on the button click, and exactly 8 bars fit between the click and the logo hit (currently 110.6 BPM).
+The optional score's tempo is also derived from the pacing: the beat drops on the button click, and exactly 8 bars fit between the click and the logo hit.
 
 ## How it's built
 
 - `src/index.html`, `src/styles.css`, `src/timeline.js`: the whole film. It is a DOM/SVG/canvas scene graph where **every frame is a pure function of `t`** (`render(t)`), so rendering is frame-exact and deterministic.
 - `src/brand.js`: the palette from the Manasetak Brand Guideline v1.0: Blue `#00A6F4`, Navy `#052F4A`, Purple `#AD46FF`, Orange `#FF6900`, their tints, and the `#F0F9FF` background. The guideline's Secondary Color page has its two hex labels swapped; the values here were read from the swatches themselves.
 - `src/brand/logo.js` and `src/brand/logo-ar.svg`: the official Arabic lockup, extracted verbatim from the guideline's vector artwork, in its approved color variants (light, navy and blue backgrounds).
-- `scripts/render.mjs`: drives headless Chromium frame by frame and pipes the frames into ffmpeg (H.264, CRF 15, yuv420p, AAC 256k).
-- `audio/soundtrack.py`: a fully synthesized score (pads, arpeggios, bass, drums) plus sound design: whooshes, typing clicks, UI pops, chimes and impacts. The hit points come from `output/cues.json`, which the page exports from the same constants that drive the animation.
+- `scripts/render.mjs`: drives headless Chromium frame by frame and pipes the frames into ffmpeg (H.264, CRF 15, yuv420p). The audio is loudness-normalized to -16 LUFS (true peak -1.5 dB) and encoded as AAC 256k.
+- `audio/soundtrack.py`: synthesized sound design (whooshes, typing clicks, UI pops, chimes and impacts). The hit points come from `output/cues.json`, which the page exports from the same constants that drive the animation. By default the mix is sound effects only; `python3 audio/soundtrack.py --music` adds the original score (pads, arpeggios, bass and drums).
 
 ## Build
 
@@ -40,6 +40,7 @@ Other commands:
 
 - `npm run preview`: opens a live, looping preview in the browser. Space pauses and the arrow keys scrub.
 - `npm run stills`: renders key frames to `output/stills/`.
+- `npm run remux`: rebuilds only the audio and swaps it into the existing video in seconds, without re-rendering frames.
 - `node scripts/render.mjs --fps 30`: renders a faster draft.
 - Open `src/index.html?t=7.5` to freeze on any moment.
 

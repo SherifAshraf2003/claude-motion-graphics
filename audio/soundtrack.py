@@ -1,12 +1,14 @@
-"""Original soundtrack + sound design for the Manasetak promo.
+"""Sound design (and an optional original score) for the Manasetak promo.
 
 Everything is synthesized from scratch (no samples, no licensing concerns).
 Hit points are read from output/cues.json, which the page exports from the
 same constants that drive the animation, so audio and picture stay locked.
 
-    python3 audio/soundtrack.py  ->  output/soundtrack.wav
+    python3 audio/soundtrack.py            ->  output/soundtrack.wav (SFX only)
+    python3 audio/soundtrack.py --music    ->  SFX + music
 """
 import json
+import sys
 import wave
 from pathlib import Path
 
@@ -30,6 +32,7 @@ BPM = 60 / BEAT
 BREAK = LOGO - BAR
 MONT0, MONT1 = cues["montage"]
 BAND = cues["band"]
+MUSIC = "--music" in sys.argv
 rng = np.random.default_rng(3)
 
 L = np.zeros(N)
@@ -84,150 +87,158 @@ def saw(f, t, detune=0.0):
 
 
 # ---------------- music ----------------
-# C major, uplifting: Fmaj7 intro | C G Am F C G F | Gsus4 break | C on the logo
-CHORDS = [
-    [48, 55, 60, 64, 67],  # C
-    [43, 55, 59, 62, 67],  # G
-    [45, 57, 60, 64, 69],  # Am
-    [41, 57, 60, 65, 69],  # F
-    [48, 55, 60, 64, 67],  # C
-    [43, 55, 59, 62, 67],  # G
-    [41, 57, 60, 65, 69],  # F
-    [43, 55, 60, 62, 67],  # Gsus4 (break: tension before the logo)
-]
-PROG = [(0.0, DROP, [53, 57, 60, 64])]  # Fmaj7 intro, filtered
-PROG += [(DROP + i * BAR, DROP + (i + 1) * BAR, c) for i, c in enumerate(CHORDS)]
-PROG += [(LOGO, DUR, [36, 55, 60, 64, 67, 72])]  # C, resolve on the end card
+# The score is optional: the default mix is sound effects only.
+# Pass --music to include pads, arpeggios, bass and drums.
+def build_music():
+    # C major, uplifting: Fmaj7 intro | C G Am F C G F | Gsus4 break | C on the logo
+    CHORDS = [
+        [48, 55, 60, 64, 67],  # C
+        [43, 55, 59, 62, 67],  # G
+        [45, 57, 60, 64, 69],  # Am
+        [41, 57, 60, 65, 69],  # F
+        [48, 55, 60, 64, 67],  # C
+        [43, 55, 59, 62, 67],  # G
+        [41, 57, 60, 65, 69],  # F
+        [43, 55, 60, 62, 67],  # Gsus4 (break: tension before the logo)
+    ]
+    PROG = [(0.0, DROP, [53, 57, 60, 64])]  # Fmaj7 intro, filtered
+    PROG += [(DROP + i * BAR, DROP + (i + 1) * BAR, c) for i, c in enumerate(CHORDS)]
+    PROG += [(LOGO, DUR, [36, 55, 60, 64, 67, 72])]  # C, resolve on the end card
 
 
-def pad(notes, t0, t1, cutoff, gain):
-    d = t1 - t0 + 0.6
-    t = tt(d)
-    sig = np.zeros_like(t)
-    for m in notes[1:]:
-        f = mtof(m)
-        for dt in (-0.004, 0.0, 0.005):
-            sig += saw(f, t, dt)
-    sig = lp(sig / (len(notes) * 3), cutoff, 2)
-    n = len(t)
-    a = int(0.25 * SR)
-    e = np.ones(n)
-    e[:a] = np.linspace(0, 1, a)
-    rel = int(0.6 * SR)
-    e[-rel:] *= np.linspace(1, 0, rel)
-    return sig * e * gain
+    def pad(notes, t0, t1, cutoff, gain):
+        d = t1 - t0 + 0.6
+        t = tt(d)
+        sig = np.zeros_like(t)
+        for m in notes[1:]:
+            f = mtof(m)
+            for dt in (-0.004, 0.0, 0.005):
+                sig += saw(f, t, dt)
+        sig = lp(sig / (len(notes) * 3), cutoff, 2)
+        n = len(t)
+        a = int(0.25 * SR)
+        e = np.ones(n)
+        e[:a] = np.linspace(0, 1, a)
+        rel = int(0.6 * SR)
+        e[-rel:] *= np.linspace(1, 0, rel)
+        return sig * e * gain
 
 
-for t0, t1, notes in PROG:
-    cutoff = 700 if t0 < DROP else (1800 if t0 < BREAK - 1e-6 else 1300)
-    if t0 >= LOGO - 1e-6:
-        cutoff = 2400
-    p = pad(notes, t0, t1, cutoff, 0.22)
-    # slight stereo spread: different detune seeds per side
-    add(p, t0, 0.9, -0.35, verb=0.35)
-    add(pad(notes, t0, t1, cutoff, 0.22), t0, 0.9, 0.35, verb=0.35)
+    for t0, t1, notes in PROG:
+        cutoff = 700 if t0 < DROP else (1800 if t0 < BREAK - 1e-6 else 1300)
+        if t0 >= LOGO - 1e-6:
+            cutoff = 2400
+        p = pad(notes, t0, t1, cutoff, 0.22)
+        # slight stereo spread: different detune seeds per side
+        add(p, t0, 0.9, -0.35, verb=0.35)
+        add(pad(notes, t0, t1, cutoff, 0.22), t0, 0.9, 0.35, verb=0.35)
 
-# intro swell: pad fades in from nothing
-fade_in = int(0.6 * DROP * SR)
-L[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
-R[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
-
-
-def pluck(f, dur=0.35, bright=4000):
-    t = tt(dur)
-    s = (2 * ((f * t) % 1) - 1) * 0.6 + np.sin(2 * np.pi * f * t) * 0.8
-    s = lp(s, bright, 2)
-    return s * env_ad(len(t), 0.002, 11)
+    # intro swell: pad fades in from nothing
+    fade_in = int(0.6 * DROP * SR)
+    L[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
+    R[:fade_in] *= np.linspace(0, 1, fade_in) ** 2
 
 
-# arpeggio: 8ths in the build, 16ths through the feature montage
-for t0, t1, notes in PROG:
-    if t0 < DROP - 1e-6 or t0 >= BREAK - 1e-6:
-        continue
-    pitches = [m + 12 for m in notes[1:]]
-    k = 0
-    t = t0
-    while t < t1 - 1e-6:
-        m = pitches[[0, 1, 2, 3, 2, 1][k % 6] % len(pitches)]
-        add(pluck(mtof(m), bright=3500 + 1500 * (k % 3)), t, 0.16, 0.5 if k % 2 else -0.5, verb=0.25)
-        t += BEAT / 4 if MONT0 - 1e-6 <= t < MONT1 else BEAT / 2
-        k += 1
-
-# end-card sparkle arpeggio (C major, rising)
-for i, m in enumerate([72, 76, 79, 84, 88]):
-    add(pluck(mtof(m), 0.6, 6000), LOGO + 0.07 + i * 0.09, 0.15, (-0.6 + i * 0.3), verb=0.6)
+    def pluck(f, dur=0.35, bright=4000):
+        t = tt(dur)
+        s = (2 * ((f * t) % 1) - 1) * 0.6 + np.sin(2 * np.pi * f * t) * 0.8
+        s = lp(s, bright, 2)
+        return s * env_ad(len(t), 0.002, 11)
 
 
-# bass: pumping 8ths on the root
-def bass_note(f, dur):
-    t = tt(dur)
-    s = np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t)
-    e = np.minimum(1, t / 0.005) * np.exp(-t * 3)
-    return lp(s * e, 900)
+    # arpeggio: 8ths in the build, 16ths through the feature montage
+    for t0, t1, notes in PROG:
+        if t0 < DROP - 1e-6 or t0 >= BREAK - 1e-6:
+            continue
+        pitches = [m + 12 for m in notes[1:]]
+        k = 0
+        t = t0
+        while t < t1 - 1e-6:
+            m = pitches[[0, 1, 2, 3, 2, 1][k % 6] % len(pitches)]
+            add(pluck(mtof(m), bright=3500 + 1500 * (k % 3)), t, 0.16, 0.5 if k % 2 else -0.5, verb=0.25)
+            t += BEAT / 4 if MONT0 - 1e-6 <= t < MONT1 else BEAT / 2
+            k += 1
+
+    # end-card sparkle arpeggio (C major, rising)
+    for i, m in enumerate([72, 76, 79, 84, 88]):
+        add(pluck(mtof(m), 0.6, 6000), LOGO + 0.07 + i * 0.09, 0.15, (-0.6 + i * 0.3), verb=0.6)
 
 
-for t0, t1, notes in PROG:
-    if t0 < DROP - 1e-6 or BREAK - 1e-6 <= t0 < LOGO - 1e-6:
-        continue
-    f = mtof(notes[0] - 12 if notes[0] > 40 else notes[0])
-    t = t0
-    while t < t1 - 1e-6:
-        add(bass_note(f, BEAT / 2), t, 0.34)
-        t += BEAT / 2
-add(bass_note(mtof(36 - 12) * 2, 2.0), LOGO, 0.5)
+    # bass: pumping 8ths on the root
+    def bass_note(f, dur):
+        t = tt(dur)
+        s = np.sin(2 * np.pi * f * t) + 0.3 * np.sin(2 * np.pi * 2 * f * t)
+        e = np.minimum(1, t / 0.005) * np.exp(-t * 3)
+        return lp(s * e, 900)
 
 
-# ---------------- drums ----------------
-def kick():
-    t = tt(0.45)
-    f = 45 + 110 * np.exp(-t * 30)
-    ph = 2 * np.pi * np.cumsum(f) / SR
-    s = np.sin(ph) * np.exp(-t * 7)
-    click = hp(rng.standard_normal(len(t)), 3000) * np.exp(-t * 300) * 0.25
-    return np.tanh((s + click) * 1.6)
+    for t0, t1, notes in PROG:
+        if t0 < DROP - 1e-6 or BREAK - 1e-6 <= t0 < LOGO - 1e-6:
+            continue
+        f = mtof(notes[0] - 12 if notes[0] > 40 else notes[0])
+        t = t0
+        while t < t1 - 1e-6:
+            add(bass_note(f, BEAT / 2), t, 0.34)
+            t += BEAT / 2
+    add(bass_note(mtof(36 - 12) * 2, 2.0), LOGO, 0.5)
 
 
-def clap():
-    t = tt(0.3)
-    n = bp(rng.standard_normal(len(t)), 900, 5000)
-    e = np.zeros_like(t)
-    for o in (0, 0.011, 0.022):
-        e += (t >= o) * np.exp(-np.maximum(t - o, 0) * 60)
-    e += np.exp(-t * 18) * 0.35
-    return n * e * 0.6
+    # ---------------- drums ----------------
+    def kick():
+        t = tt(0.45)
+        f = 45 + 110 * np.exp(-t * 30)
+        ph = 2 * np.pi * np.cumsum(f) / SR
+        s = np.sin(ph) * np.exp(-t * 7)
+        click = hp(rng.standard_normal(len(t)), 3000) * np.exp(-t * 300) * 0.25
+        return np.tanh((s + click) * 1.6)
 
 
-def hat(open_=False):
-    t = tt(0.25 if open_ else 0.06)
-    n = hp(rng.standard_normal(len(t)), 7500)
-    return n * np.exp(-t * (18 if open_ else 90)) * 0.5
+    def clap():
+        t = tt(0.3)
+        n = bp(rng.standard_normal(len(t)), 900, 5000)
+        e = np.zeros_like(t)
+        for o in (0, 0.011, 0.022):
+            e += (t >= o) * np.exp(-np.maximum(t - o, 0) * 60)
+        e += np.exp(-t * 18) * 0.35
+        return n * e * 0.6
 
 
-def duck_at(t0, depth=0.55, rel=0.22):
-    i = int(t0 * SR)
-    t = tt(rel)
-    d = 1 - depth * (1 - t / rel) ** 2
-    j = min(N, i + len(t))
-    duck[i:j] = np.minimum(duck[i:j], d[: j - i])
+    def hat(open_=False):
+        t = tt(0.25 if open_ else 0.06)
+        n = hp(rng.standard_normal(len(t)), 7500)
+        return n * np.exp(-t * (18 if open_ else 90)) * 0.5
 
 
-beat = DROP
-b = 0
-while beat < BREAK - 1e-6:
-    add(kick(), beat, 0.95)
-    duck_at(beat)
-    montage = MONT0 - 1e-6 <= beat < MONT1
-    if beat >= MONT0 - 1e-6 and b % 2 == 1:
-        add(clap(), beat, 0.45, 0.1, verb=0.3)
-    add(hat(open_=beat >= MONT0 - 1e-6), beat + BEAT / 2, 0.22, 0.3)
-    if montage:
-        for q in (0.25, 0.75):
-            add(hat(), beat + BEAT * q, 0.12, -0.3)
-    beat += BEAT
-    b += 1
-# fill into the grade-journey scene
-for i in range(4):
-    add(clap(), BAND + i * 0.0625, 0.18 + 0.06 * i, 0.0, verb=0.2)
+    def duck_at(t0, depth=0.55, rel=0.22):
+        i = int(t0 * SR)
+        t = tt(rel)
+        d = 1 - depth * (1 - t / rel) ** 2
+        j = min(N, i + len(t))
+        duck[i:j] = np.minimum(duck[i:j], d[: j - i])
+
+
+    beat = DROP
+    b = 0
+    while beat < BREAK - 1e-6:
+        add(kick(), beat, 0.95)
+        duck_at(beat)
+        montage = MONT0 - 1e-6 <= beat < MONT1
+        if beat >= MONT0 - 1e-6 and b % 2 == 1:
+            add(clap(), beat, 0.45, 0.1, verb=0.3)
+        add(hat(open_=beat >= MONT0 - 1e-6), beat + BEAT / 2, 0.22, 0.3)
+        if montage:
+            for q in (0.25, 0.75):
+                add(hat(), beat + BEAT * q, 0.12, -0.3)
+        beat += BEAT
+        b += 1
+    # fill into the grade-journey scene
+    for i in range(4):
+        add(clap(), BAND + i * 0.0625, 0.18 + 0.06 * i, 0.0, verb=0.2)
+
+
+if MUSIC:
+    build_music()
+
 
 # ---------------- sound design ----------------
 def whoosh(dur=0.55, lo=300, hi=6000, rev=False):
@@ -306,8 +317,9 @@ for a, b in cues["risers"]:
     add(riser(b - a), a, 0.35, 0.0, verb=0.3)
 for w in cues["whooshes"]:
     add(whoosh(0.55), w - 0.15, 0.55, 0.0, verb=0.3)
+# without the score the impacts would dwarf the UI sounds, so they sit lower
 for t0 in cues["impacts"]:
-    add(impact(), t0, 0.75, 0.0, verb=0.5)
+    add(impact(), t0, 0.75 if MUSIC else 0.4, 0.0, verb=0.5)
 for t0 in cues["clicks"]:
     add(click(), t0, 0.5, 0.2)
 for i, t0 in enumerate(cues["type"]):
@@ -362,4 +374,4 @@ with wave.open(str(out), "wb") as w:
     w.setsampwidth(2)
     w.setframerate(SR)
     w.writeframes(pcm.tobytes())
-print(f"wrote {out.relative_to(ROOT)}  ({DUR:.1f}s, {BPM:.1f} BPM, {SR} Hz stereo)")
+print(f"wrote {out.relative_to(ROOT)}  ({DUR:.1f}s, {'music ' + format(BPM, '.1f') + ' BPM' if MUSIC else 'SFX only'}, {SR} Hz stereo)")
