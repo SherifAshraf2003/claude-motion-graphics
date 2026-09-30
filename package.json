@@ -1,0 +1,27 @@
+{
+  "name": "manasetak-promo",
+  "version": "1.0.0",
+  "description": "15s Arabic motion-graphics promo for Manasetak, rendered frame-exact from HTML/JS",
+  "scripts": {
+    "preview": "npx http-server -c-1 -p 8080 . -o /src/index.html",
+    "cues": "node scripts/render.mjs --cues",
+    "audio": "npm run cues && python3 audio/soundtrack.py",
+    "stills": "node scripts/render.mjs --stills 1.9,4.2,5.6,6.7,7.7,8.7,9.7,10.9,11.9,14.3",
+    "video": "node scripts/render.mjs",
+    "build": "npm run audio && npm run video"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SherifAshraf2003/claude-motion-graphics.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SherifAshraf2003/claude-motion-graphics/issues"
+  },
+  "homepage": "https://github.com/SherifAshraf2003/claude-motion-graphics#readme",
+  "dependencies": {
+    "@fontsource/cairo": "^5.3.0",
+    "playwright": "^1.56.1"
+  },
+  "private": true,
+  "type": "module"
+}

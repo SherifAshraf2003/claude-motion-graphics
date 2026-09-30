@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Manasetak Promo</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/500.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/600.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/800.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/cairo/900.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="stage">
+
+  <!-- ============ SCENE 1 · HOOK ============ -->
+  <section id="s1" class="scene">
+    <div class="bg bg-ink"></div>
+    <div id="s1gA" class="glow" style="--c:var(--primary);width:1100px;height:1100px"></div>
+    <div id="s1gB" class="glow" style="--c:var(--accent);width:800px;height:800px;opacity:.35"></div>
+    <canvas id="c1" class="fx" width="1920" height="1080"></canvas>
+    <div class="streak" id="st0"></div><div class="streak" id="st1"></div><div class="streak" id="st2"></div>
+    <div id="s1wrap" class="abs full">
+      <div id="s1pill" class="pill glass"><i class="dot"></i>منصتك</div>
+      <h1 id="s1l1" class="hl center" style="top:262px">
+        <span class="w"><span class="wi">منصة</span></span>
+        <span class="w"><span class="wi">تعليمية</span></span>
+        <span class="w"><span class="wi">كاملة</span></span>
+      </h1>
+      <h1 id="s1l2" class="hl center" style="top:440px">
+        <span class="w"><span class="wi">بضغطة</span></span>
+        <span class="w"><span class="wi">زر</span></span>
+        <span class="accwrap"><span class="w"><span class="wi acc">واحدة</span></span>
+          <svg class="uline" viewBox="0 0 300 40" preserveAspectRatio="none"><path id="s1under" d="M6 26 C 80 8, 200 6, 294 20"/></svg>
+        </span>
+      </h1>
+      <div id="s1rings"><i class="ring"></i><i class="ring"></i><i class="ring"></i></div>
+      <div id="s1btn" class="btn big">أنشئ منصتك <span class="arr">←</span></div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 2 · PLATFORM BUILDS ============ -->
+  <section id="s2" class="scene">
+    <div class="bg bg-primary"></div>
+    <div class="gridbg"></div>
+    <div id="s2gA" class="glow" style="--c:#ffffff;width:900px;height:900px;opacity:.18"></div>
+    <div id="s2gB" class="glow" style="--c:var(--accent);width:700px;height:700px;opacity:.28"></div>
+    <div id="s2all" class="abs full">
+      <div id="s2text" class="abs">
+        <div id="s2eyebrow" class="pill glass sm"><svg class="ic"><use href="#i-link"/></svg>رابط خاص باسمك</div>
+        <h2 id="s2h" class="hl2">
+          <span class="w"><span class="wi">منصتك</span></span>
+          <span class="w"><span class="wi">جاهزة</span></span><br>
+          <span class="w"><span class="wi">في</span></span>
+          <span class="w"><span class="wi acc">دقائق</span></span>
+        </h2>
+        <p id="s2p" class="lead">
+          <span class="w"><span class="wi">تحكم كامل،</span></span>
+          <span class="w"><span class="wi">مرونة في الإعدادات،</span></span>
+          <span class="w"><span class="wi">وراحة تامة للمعلم والطالب</span></span>
+        </p>
+      </div>
+      <div id="s2cam" class="abs full">
+        <div id="browser" class="abs">
+          <div class="bbar">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <div class="url"><svg class="ic"><use href="#i-lock"/></svg><span id="urltext"></span><span id="caret"></span></div>
+            <div id="urlok" class="okchip"><svg class="ic"><use href="#i-check"/></svg>جاهز</div>
+          </div>
+          <div class="app">
+            <aside class="side">
+              <div class="brand"><span class="bmark"><svg class="ic"><use href="#i-play"/></svg></span>منصتك</div>
+              <div class="mi on"><svg class="ic"><use href="#i-grid"/></svg>الرئيسية</div>
+              <div class="mi"><svg class="ic"><use href="#i-book"/></svg>الكورسات</div>
+              <div class="mi"><svg class="ic"><use href="#i-quiz"/></svg>الامتحانات</div>
+              <div class="mi"><svg class="ic"><use href="#i-users"/></svg>الطلاب</div>
+              <div class="mi"><svg class="ic"><use href="#i-chart"/></svg>الإحصائيات</div>
+              <div class="mi"><svg class="ic"><use href="#i-sliders"/></svg>الإعدادات</div>
+            </aside>
+            <main class="main">
+              <div class="hello"><div class="t1">أهلاً، أ. عبدالله</div><div class="t2">لوحة التحكم · اليوم</div></div>
+              <div class="stats">
+                <div class="stat"><div class="sl">الطلاب</div><div class="sv"><span id="cn0">0</span></div><div class="sb up">+12%</div></div>
+                <div class="stat"><div class="sl">الكورسات</div><div class="sv"><span id="cn1">0</span></div><div class="sb">نشطة</div></div>
+                <div class="stat"><div class="sl">نسبة النجاح</div><div class="sv"><span id="cn2">0</span>%</div><div class="sb up">ممتاز</div></div>
+              </div>
+              <div class="sech">كورساتك</div>
+              <div class="courses">
+                <div class="course"><div class="thumb th1"><span>فيزياء</span><svg class="ic"><use href="#i-play"/></svg></div><div class="ct">الباب الأول: الحركة</div><div class="cm">12 درس · 340 طالب</div></div>
+                <div class="course"><div class="thumb th2"><span>فيزياء</span><svg class="ic"><use href="#i-play"/></svg></div><div class="ct">الباب الثاني: الكهربية</div><div class="cm">9 دروس · 286 طالب</div></div>
+                <div class="course"><div class="thumb th3"><span>مراجعة</span><svg class="ic"><use href="#i-play"/></svg></div><div class="ct">مراجعة ليلة الامتحان</div><div class="cm">4 دروس · 512 طالب</div></div>
+              </div>
+            </main>
+          </div>
+        </div>
+        <div id="toast1" class="toast abs"><span class="ti" style="background:var(--mint)"><svg class="ic"><use href="#i-users"/></svg></span><div><b><bdi dir="ltr">+120</bdi> طالب جديد</b><small>انضموا اليوم</small></div></div>
+        <div id="toast2" class="toast abs"><span class="ti" style="background:var(--primary)"><svg class="ic"><use href="#i-upload"/></svg></span><div><b>تم رفع محاضرة جديدة</b><small>الباب الثاني · الدرس 5</small></div></div>
+      </div>
+    </div>
+    <div id="s2dim" class="abs full" style="background:#050b22;opacity:0"></div>
+  </section>
+
+  <!-- ============ SCENE 3 · FEATURES MONTAGE ============ -->
+  <section id="s3" class="scene">
+    <div class="bg bg-ink"></div>
+    <div id="s3glows"></div>
+    <canvas id="c3" class="fx" width="1920" height="1080"></canvas>
+    <div id="s3head" class="abs"><i></i>كل ما تحتاجه في منصة واحدة</div>
+    <div id="feats"></div>
+    <div id="s3prog" class="abs"></div>
+  </section>
+
+  <!-- ============ SCENE 4 · ALL GRADES ============ -->
+  <section id="s4" class="scene">
+    <div class="bg bg-deep"></div>
+    <div id="s4g" class="glow" style="--c:var(--primary);width:1400px;height:900px;opacity:.55"></div>
+    <canvas id="c4" class="fx" width="1920" height="1080"></canvas>
+    <div id="s4all" class="abs full">
+      <h2 id="s4h" class="hl2 center" style="top:120px">
+        <span class="w"><span class="wi">لكل</span></span>
+        <span class="w"><span class="wi">المراحل</span></span>
+        <span class="w"><span class="wi acc">الدراسية</span></span>
+      </h2>
+      <p id="s4p" class="lead center" style="top:272px">
+        <span class="w"><span class="wi">من الصف الأول الإعدادي</span></span>
+        <span class="w"><span class="wi">حتى الصف الثالث الثانوي</span></span>
+      </p>
+      <svg id="s4svg" class="abs full" viewBox="0 0 1920 1080">
+        <defs>
+          <linearGradient id="pathg" x1="1" x2="0" y1="0" y2="0">
+            <stop offset="0" stop-color="var(--accent)"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="var(--primary-light)"/>
+          </linearGradient>
+        </defs>
+        <path id="s4ghost" fill="none" stroke="rgba(255,255,255,.10)" stroke-width="4" stroke-dasharray="2 14" stroke-linecap="round"/>
+        <path id="s4path" fill="none" stroke="url(#pathg)" stroke-width="6" stroke-linecap="round"/>
+      </svg>
+      <div id="s4nodes"></div>
+      <div id="s4trav" class="abs"></div>
+    </div>
+  </section>
+
+  <!-- ============ SCENE 5 · END CARD ============ -->
+  <section id="s5" class="scene">
+    <div class="bg bg-paper"></div>
+    <div class="gridbg light"></div>
+    <div id="s5gA" class="glow" style="--c:var(--primary);width:1100px;height:1100px;opacity:.20"></div>
+    <div id="s5gB" class="glow" style="--c:var(--accent);width:800px;height:800px;opacity:.22"></div>
+    <div id="s5orbit"></div>
+    <div id="s5all" class="abs full">
+      <div id="logo" class="abs">
+        <div id="lmark"><svg viewBox="0 0 100 100"><use href="#logo-glyph"/></svg><i id="lshine"></i></div>
+        <div id="lword"><span>منصتك</span></div>
+      </div>
+      <p id="s5tag" class="center">
+        <span class="w"><span class="wi">منصة واحدة</span></span>
+        <span class="w"><span class="wi">لكل احتياجاتك</span></span>
+        <span class="w"><span class="wi acc2">التعليمية</span></span>
+      </p>
+      <div id="s5cta" class="abs">
+        <div id="s5rings"><i class="ring dark"></i><i class="ring dark"></i></div>
+        <div id="s5btn" class="btn">أنشئ منصتك الآن <span class="arr">←</span></div>
+        <div id="s5url">manasetak.com</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- transitions + overlays -->
+  <div id="band" class="abs"></div>
+  <svg id="cursor" class="abs" viewBox="0 0 40 48"><path d="M4 3 L4 39 L13.5 30 L20 44.5 L26.5 41.6 L20.2 27.6 L33.5 27.6 Z"/></svg>
+  <div id="vignette" class="abs full"></div>
+  <div id="grain" class="abs full"></div>
+</div>
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-quiz" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2.5"/><path d="M9 4V2.8h6V4"/><path d="M9 12.5l2.2 2.2L15.5 10"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8l7.5 3v6.2c0 4.6-3.1 7.9-7.5 9.4-4.4-1.5-7.5-4.8-7.5-9.4V5.8z"/><path d="M8.8 12l2.2 2.2 4.3-4.4"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 21h18"/><rect x="5" y="11" width="3.2" height="7" rx="1"/><rect x="10.4" y="5.5" width="3.2" height="12.5" rx="1"/><rect x="15.8" y="8.5" width="3.2" height="9.5" rx="1"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14.5h2M14 14.5h2M8 17.5h2"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.8c1.9.7 3.1 2.4 3.5 5.2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.5 5.5v13l10.5-6.5z" fill="currentColor" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5V5.5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M18 6h2M4 12h3M12 12h8M4 18h11M20 18h0"/><circle cx="15.5" cy="6" r="2.2"/><circle cx="9.5" cy="12" r="2.2"/><circle cx="17.5" cy="18" r="2.2"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 2.8h8l4.5 4.5V20a1.2 1.2 0 0 1-1.2 1.2H6A1.2 1.2 0 0 1 4.8 20V4A1.2 1.2 0 0 1 6 2.8z"/><path d="M14 2.8V7.5h4.5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <!-- Placeholder brand glyph: screen + play + spark. Swap for the official logo. -->
+    <symbol id="logo-glyph" viewBox="0 0 100 100">
+      <rect x="18" y="24" width="64" height="44" rx="9" fill="none" stroke="#fff" stroke-width="7"/>
+      <path d="M44 36 L44 56 L60 46 Z" fill="#fff" stroke="#fff" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M36 80 H64" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="78" cy="22" r="8" fill="var(--accent)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<script src="brand.js"></script>
+<script src="timeline.js"></script>
+</body>
+</html>

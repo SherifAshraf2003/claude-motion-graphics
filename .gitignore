@@ -1,0 +1,4 @@
+node_modules/
+output/stills/
+output/cues.json
+output/soundtrack.wav
